@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "module": "commonjs",
   "description": "Next Talk Real Time  Chatting Application",
-  "main": "index.js",
+  "main": "server.js",
   "author": "Rasel Ahmmed",
   "license": "MIT",
   "scripts": {
-    "start": "tsc && node dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
+    "start": "tsc && node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
