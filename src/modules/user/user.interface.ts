@@ -4,4 +4,5 @@ export interface IUser {
   email?: string;
   phone: string;
   password: string;
+  contacts?: Array<string>; // or Array<IUser> if populated
 }
