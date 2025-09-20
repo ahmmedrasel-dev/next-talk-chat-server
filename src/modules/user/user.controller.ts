@@ -171,3 +171,42 @@ export const addContact = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const authUser = async (req: Request, res: Response) => {
+  // Requires JWT middleware to set req.userId
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return SendResponse(res, {
+        statusCode: 401,
+        success: false,
+        message: "Unauthorized. Missing userId.",
+        data: null,
+      });
+    }
+    const user = await User.findById(userId)
+      .select("-password")
+      .populate("contacts", "full_name phone");
+    if (!user) {
+      return SendResponse(res, {
+        statusCode: 404,
+        success: false,
+        message: "User not found.",
+        data: null,
+      });
+    }
+    return SendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "User authenticated successfully.",
+      data: user,
+    });
+  } catch (error) {
+    return SendResponse(res, {
+      statusCode: 500,
+      success: false,
+      message: "Failed to authenticate user.",
+      data: error,
+    });
+  }
+};
