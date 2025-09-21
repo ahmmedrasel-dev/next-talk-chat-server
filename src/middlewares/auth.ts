@@ -20,7 +20,7 @@ const auth = (req: AuthRequest, res: Response, next: NextFunction) => {
       .json({ success: false, message: "No token provided" });
   }
   try {
-    const decoded = jwt.verify(token, config.jwt_secret);
+    const decoded = jwt.verify(token, config.jwt_secret as string);
     // @ts-ignore
     req.userId = decoded._id;
     next();

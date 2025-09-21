@@ -2,11 +2,14 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import userRoutes from "./modules/user/user.route";
 import rateLimit from "express-rate-limit";
+import cookieParser from "cookie-parser";
+import config from "./config";
 
 const app: Application = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: config.client_url as string }));
+app.use(cookieParser());
 app.use(express.json());
 
 // Rate limiting middleware (100 requests per 15 minutes per IP)

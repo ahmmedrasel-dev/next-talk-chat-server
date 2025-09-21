@@ -1,9 +1,15 @@
-import User from "./user.model";
 import { Request, Response } from "express";
-import { createUser, findUserByPhone, validatePassword } from "./user.service";
-import { generateToken, generateRefreshToken } from "../../utils/jwt";
+import {
+  createUser,
+  findUserByPhone,
+  loginUser,
+  addContactToUser,
+  getUserById,
+  refreshAccessToken,
+} from "./user.service";
 import { signupSchema, loginSchema } from "./user.validation";
 import SendResponse from "../../utils/sendResponse";
+import config from "../../config";
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -59,64 +65,43 @@ export const login = async (req: Request, res: Response) => {
         data: parseResult.error.errors,
       });
     }
+
     const { phone, password } = parseResult.data;
-    const user = await findUserByPhone(phone);
-    if (!user) {
-      return SendResponse(res, {
-        statusCode: 401,
-        success: false,
-        message: "Invalid credentials.",
-        data: null,
-      });
-    }
-    const isValid = await validatePassword(password, user.password);
-    if (!isValid) {
-      return SendResponse(res, {
-        statusCode: 401,
-        success: false,
-        message: "Invalid credentials.",
-        data: null,
-      });
-    }
-    const token = generateToken({ _id: user._id, phone: user.phone });
-    const refreshToken = generateRefreshToken({
-      _id: user._id,
-      phone: user.phone,
+    const result = await loginUser(phone, password);
+
+    // Set refresh token in another HTTP-only cookie
+    res.cookie("refreshToken", result.refreshToken, {
+      secure: config.node_env === "production",
+      httpOnly: true,
     });
+
     return SendResponse(res, {
       statusCode: 200,
       success: true,
       message: "Login successful",
-      data: { token, refreshToken },
+      data: {
+        user: result.user,
+        accessToken: result.accessToken,
+        message: "Authentication tokens set in cookies",
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
+    const statusCode = error.message === "Invalid credentials" ? 401 : 500;
     return SendResponse(res, {
-      statusCode: 500,
+      statusCode,
       success: false,
-      message: "Login failed",
-      data: error,
+      message: error.message || "Login failed",
+      data: null,
     });
   }
 };
 
 // Add contact by phone (search and add in one call)
 export const addContact = async (req: Request, res: Response) => {
-  // Requires JWT middleware to set req.userId
   try {
     const { contactPhone } = req.body;
-
-    // Search for contact by phone
-    const contactUser = await User.findOne({ phone: contactPhone });
-    if (!contactUser) {
-      return SendResponse(res, {
-        statusCode: 404,
-        success: false,
-        message: "Contact not found.",
-        data: null,
-      });
-    }
-    // Find current user by userId from JWT middleware
     const userId = (req as any).userId;
+
     if (!userId) {
       return SendResponse(res, {
         statusCode: 401,
@@ -125,55 +110,31 @@ export const addContact = async (req: Request, res: Response) => {
         data: null,
       });
     }
-    const user = await User.findById(userId);
-    if (!user) {
-      return SendResponse(res, {
-        statusCode: 404,
-        success: false,
-        message: "User not found.",
-        data: null,
-      });
-    }
-    // Initialize contacts array if missing
-    if (!user.contacts) user.contacts = [];
-    // Check if contact already added
-    if (
-      user.contacts
-        .map((id) => id.toString())
-        .includes(contactUser._id.toString())
-    ) {
-      return SendResponse(res, {
-        statusCode: 409,
-        success: false,
-        message: "Contact already added.",
-        data: null,
-      });
-    }
-    // Add contact
-    user.contacts.push(contactUser._id);
-    await user.save();
+
+    const contactData = await addContactToUser(userId, contactPhone);
+
     return SendResponse(res, {
       statusCode: 200,
       success: true,
       message: "Contact found and added successfully.",
-      data: {
-        _id: contactUser._id,
-        full_name: contactUser.full_name,
-        phone: contactUser.phone,
-      },
+      data: contactData,
     });
-  } catch (error) {
+  } catch (error: any) {
+    let statusCode = 500;
+    if (error.message === "Contact not found") statusCode = 404;
+    if (error.message === "User not found") statusCode = 404;
+    if (error.message === "Contact already added") statusCode = 409;
+
     return SendResponse(res, {
-      statusCode: 500,
+      statusCode,
       success: false,
-      message: "Failed to add contact.",
-      data: error,
+      message: error.message || "Failed to add contact.",
+      data: null,
     });
   }
 };
 
 export const authUser = async (req: Request, res: Response) => {
-  // Requires JWT middleware to set req.userId
   try {
     const userId = (req as any).userId;
     if (!userId) {
@@ -184,29 +145,98 @@ export const authUser = async (req: Request, res: Response) => {
         data: null,
       });
     }
-    const user = await User.findById(userId)
-      .select("-password")
-      .populate("contacts", "full_name phone");
-    if (!user) {
-      return SendResponse(res, {
-        statusCode: 404,
-        success: false,
-        message: "User not found.",
-        data: null,
-      });
-    }
+
+    const user = await getUserById(userId);
+
     return SendResponse(res, {
       statusCode: 200,
       success: true,
       message: "User authenticated successfully.",
       data: user,
     });
-  } catch (error) {
+  } catch (error: any) {
+    const statusCode = error.message === "User not found" ? 404 : 500;
+    return SendResponse(res, {
+      statusCode,
+      success: false,
+      message: error.message || "Failed to authenticate user.",
+      data: null,
+    });
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  try {
+    // Clear the authentication cookies
+    res.clearCookie("auth_token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    res.clearCookie("refresh_token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return SendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Logged out successfully",
+      data: null,
+    });
+  } catch (error: any) {
     return SendResponse(res, {
       statusCode: 500,
       success: false,
-      message: "Failed to authenticate user.",
-      data: error,
+      message: "Failed to logout",
+      data: null,
+    });
+  }
+};
+
+export const refreshToken = async (req: Request, res: Response) => {
+  try {
+    const refreshTokenFromCookie = req.cookies?.refreshToken;
+
+    if (!refreshTokenFromCookie) {
+      return SendResponse(res, {
+        statusCode: 401,
+        success: false,
+        message: "Refresh token not found",
+        data: null,
+      });
+    }
+
+    const result = await refreshAccessToken(refreshTokenFromCookie);
+
+    // Set new tokens in cookies
+    res.cookie("authToken", result.token, {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+    });
+
+    res.cookie("refreshToken", result.refreshToken, {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+    });
+
+    return SendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Tokens refreshed successfully",
+      data: {
+        user: result.user,
+        message: "New authentication tokens set in cookies",
+      },
+    });
+  } catch (error: any) {
+    return SendResponse(res, {
+      statusCode: 401,
+      success: false,
+      message: error.message || "Failed to refresh token",
+      data: null,
     });
   }
 };
