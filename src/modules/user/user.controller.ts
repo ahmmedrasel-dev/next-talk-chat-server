@@ -11,8 +11,9 @@ import { signupSchema, loginSchema } from "./user.validation";
 import SendResponse from "../../utils/sendResponse";
 import config from "../../config";
 
-export const signup = async (req: Request, res: Response) => {
+const signup = async (req: Request, res: Response) => {
   try {
+    console.log(req.body);
     const parseResult = signupSchema.safeParse(req.body);
     if (!parseResult.success) {
       return SendResponse(res, {
@@ -54,7 +55,7 @@ export const signup = async (req: Request, res: Response) => {
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+const login = async (req: Request, res: Response) => {
   try {
     const parseResult = loginSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -80,9 +81,7 @@ export const login = async (req: Request, res: Response) => {
       success: true,
       message: "Login successful",
       data: {
-        user: result.user,
         accessToken: result.accessToken,
-        message: "Authentication tokens set in cookies",
       },
     });
   } catch (error: any) {
@@ -97,7 +96,7 @@ export const login = async (req: Request, res: Response) => {
 };
 
 // Add contact by phone (search and add in one call)
-export const addContact = async (req: Request, res: Response) => {
+const addContact = async (req: Request, res: Response) => {
   try {
     const { contactPhone } = req.body;
     const userId = (req as any).userId;
@@ -134,7 +133,7 @@ export const addContact = async (req: Request, res: Response) => {
   }
 };
 
-export const authUser = async (req: Request, res: Response) => {
+const authUser = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
     if (!userId) {
@@ -165,7 +164,7 @@ export const authUser = async (req: Request, res: Response) => {
   }
 };
 
-export const logout = async (req: Request, res: Response) => {
+const logout = async (req: Request, res: Response) => {
   try {
     // Clear the authentication cookies
     res.clearCookie("auth_token", {
@@ -196,7 +195,7 @@ export const logout = async (req: Request, res: Response) => {
   }
 };
 
-export const refreshToken = async (req: Request, res: Response) => {
+const refreshToken = async (req: Request, res: Response) => {
   try {
     const refreshTokenFromCookie = req.cookies?.refreshToken;
 
@@ -239,4 +238,13 @@ export const refreshToken = async (req: Request, res: Response) => {
       data: null,
     });
   }
+};
+
+export const userController = {
+  signup,
+  login,
+  addContact,
+  authUser,
+  logout,
+  refreshToken,
 };
